@@ -1,0 +1,43 @@
+﻿@model Site.Models.Order
+
+@{
+    ViewBag.Title = "Refund";
+}
+
+<h2>Refund</h2>
+
+<h3>Are you sure you want to refund this order?</h3>
+<fieldset>
+    <legend>Order</legend>
+
+    <div class="display-label">OrderNumber</div>
+    <div class="display-field">
+        @Html.DisplayFor(model => model.OrderNumber)
+    </div>
+
+    <div class="display-label">DatePlaced</div>
+    <div class="display-field">
+        @Html.DisplayFor(model => model.DatePlaced)
+    </div>
+
+    <div class="display-label">CustomerName</div>
+    <div class="display-field">
+        @Html.DisplayFor(model => model.CustomerName)
+    </div>
+
+    <div class="display-label">Total</div>
+    <div class="display-field">
+        @Html.DisplayFor(model => model.Total)
+    </div>
+
+    <div class="display-label">Refunded</div>
+    <div class="display-field">
+        @Html.DisplayFor(model => model.Refunded)
+    </div>
+</fieldset>
+@using (Html.BeginForm()) {
+    <p>
+        <input type="submit" value="Refund" /> |
+        @Html.ActionLink("Back to List", "Index")
+    </p>
+}

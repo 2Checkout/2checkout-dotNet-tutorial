@@ -1,0 +1,13 @@
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\Site.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\Site.pdb
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\EntityFramework.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\TwoCheckout.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\Newtonsoft.Json.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\nunit.framework.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\EntityFramework.xml
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\TwoCheckout.pdb
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\Newtonsoft.Json.pdb
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\bin\Newtonsoft.Json.xml
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\obj\Debug\ResolveAssemblyReference.cache
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\obj\Debug\Site.dll
+c:\users\craig\documents\visual studio 2010\Projects\Site\Site\obj\Debug\Site.pdb

@@ -1,0 +1,65 @@
+﻿@model Site.Models.Order
+
+@{
+    ViewBag.Title = "Create";
+}
+
+<h2>Create</h2>
+
+<script src="@Url.Content("~/Scripts/jquery.validate.min.js")" type="text/javascript"></script>
+<script src="@Url.Content("~/Scripts/jquery.validate.unobtrusive.min.js")" type="text/javascript"></script>
+
+@using (Html.BeginForm()) {
+    @Html.ValidationSummary(true)
+    <fieldset>
+        <legend>Order</legend>
+
+        <div class="editor-label">
+            @Html.LabelFor(model => model.OrderNumber)
+        </div>
+        <div class="editor-field">
+            @Html.EditorFor(model => model.OrderNumber)
+            @Html.ValidationMessageFor(model => model.OrderNumber)
+        </div>
+
+        <div class="editor-label">
+            @Html.LabelFor(model => model.DatePlaced)
+        </div>
+        <div class="editor-field">
+            @Html.EditorFor(model => model.DatePlaced)
+            @Html.ValidationMessageFor(model => model.DatePlaced)
+        </div>
+
+        <div class="editor-label">
+            @Html.LabelFor(model => model.CustomerName)
+        </div>
+        <div class="editor-field">
+            @Html.EditorFor(model => model.CustomerName)
+            @Html.ValidationMessageFor(model => model.CustomerName)
+        </div>
+
+        <div class="editor-label">
+            @Html.LabelFor(model => model.Total)
+        </div>
+        <div class="editor-field">
+            @Html.EditorFor(model => model.Total)
+            @Html.ValidationMessageFor(model => model.Total)
+        </div>
+
+        <div class="editor-label">
+            @Html.LabelFor(model => model.Refunded)
+        </div>
+        <div class="editor-field">
+            @Html.EditorFor(model => model.Refunded)
+            @Html.ValidationMessageFor(model => model.Refunded)
+        </div>
+
+        <p>
+            <input type="submit" value="Create" />
+        </p>
+    </fieldset>
+}
+
+<div>
+    @Html.ActionLink("Back to List", "Index")
+</div>
