@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="2Checkout .NET Tutorial : 2Checkout .NET Integration Tutorial" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>2Checkout .NET Tutorial</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/2Checkout/2checkout-dotNet-tutorial">View on GitHub</a>
+
+          <h1 id="project_title">2Checkout .NET Tutorial</h1>
+          <h2 id="project_tagline">2Checkout .NET Integration Tutorial</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/2Checkout/2checkout-dotNet-tutorial/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/2Checkout/2checkout-dotNet-tutorial/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h2>2Checkout .NET Integration Tutorial</h2>
+
+<hr><p>In this tutorial we will walk through integrating the 2Checkout payment method into an existing site built on the .NET MVC3 framework using C#. The source for the example application used in this tutorial can be accessed in this Github repository.</p>
+
+<h2>Setting up the Example Application</h2>
+
+<p>We need an existing example application to demonstrate the integration so lets download or clone the 2checkout-dotNet-tutorial application.</p>
+
+<div class="highlight"><pre><span class="nv">$ </span>git clone https://github.com/2checkout/2checkout-dotNet-tutorial.git
+</pre></div>
+
+<p>This repository contains both an example before and after application so that we can follow along with the tutorial using the site_before app and compare the result with the site_after app. We can loading up the site_before application in Visual Studio.</p>
+
+<p>We will need to add a reference.</p>
+
+<ul>
+<li><a href="http://json.codeplex.com/releases/view/92198">Json.NET 4.5</a></li>
+</ul><p>The project also requires that you have MVC3, VS 2010 SP1 and SQL CE.</p>
+
+<p>Let's go ahead and startup the example application by running it in Visual Studio.</p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-1.png" alt=""></p>
+
+<p>You can see that this site provides the user with an order button. It also provides us with a way to manage orders that are placed.</p>
+
+<p><em>/Orders/</em></p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-2.png" alt=""></p>
+
+<p>In this tutorial, we will integrate the 2Checkout payment method so that the user can purchase and we can validate the MD5 hash returned by 2Checkout. We will also setup a listener that can be used to update the order on the Fraud Status Changed notification send by 2Checkout. To provide an example API usage, we will add the ability to refund the order.</p>
+
+<h2>Adding the 2Checkout dotNet Library</h2>
+
+<p>The 2Checkout Java library provides us with a simple bindings to the API, INS and Checkout process so that we can integrate each feature with only a few lines of code. We can download or clone the library at <a href="https://github.com/2checkout/2checkout-dotnet">https://github.com/2checkout/2checkout-dotnet</a>.</p>
+
+<p>Including the library is as easy as downloading the dll and adding it as a reference.</p>
+
+<h2>Setup Checkout</h2>
+
+<p>To pass the buyer and the sale to 2Checkout we will need to link our button to the 2Checkout checkout page. Lets go ahead and setup a new method in our OrdersController that will utilize the TwocheckoutCharge method to build our payment link.</p>
+
+<p><em>Controllers/OrdersController.cs</em></p>
+
+<div class="highlight"><pre><span class="c1">//Pass Order and Buyer to 2Checkout</span>
+<span class="k">public</span> <span class="n">ActionResult</span> <span class="nf">Checkout</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="c1">//Get Timestamp</span>
+    <span class="n">DateTime</span> <span class="n">date</span> <span class="p">=</span> <span class="n">DateTime</span><span class="p">.</span><span class="n">Now</span><span class="p">;</span>
+    <span class="n">String</span> <span class="n">time</span> <span class="p">=</span> <span class="n">date</span><span class="p">.</span><span class="n">ToString</span><span class="p">(</span><span class="s">"yyyyMMdd-HHmmss"</span><span class="p">);</span>
+
+    <span class="c1">//Create Pending Order</span>
+    <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Order</span><span class="p">();</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">CustomerName</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">Total</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">DatePlaced</span> <span class="p">=</span> <span class="n">time</span><span class="p">;</span>
+    <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">order</span><span class="p">);</span>
+    <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+
+    <span class="c1">//Pass to 2Checkout</span>
+    <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sid"</span><span class="p">,</span> <span class="s">"1817037"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"mode"</span><span class="p">,</span> <span class="s">"2CO"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_type"</span><span class="p">,</span> <span class="s">"Product"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_name"</span><span class="p">,</span> <span class="s">"Example Product"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_price"</span><span class="p">,</span> <span class="s">"1.00"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"merchant_order_id"</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">ID</span><span class="p">.</span><span class="n">ToString</span><span class="p">());</span>
+    <span class="n">String</span> <span class="n">PaymentLink</span> <span class="p">=</span> <span class="n">TwocheckoutCharge</span><span class="p">.</span><span class="n">Link</span><span class="p">(</span><span class="n">dictionary</span><span class="p">);</span>
+    <span class="n">Response</span><span class="p">.</span><span class="n">Redirect</span><span class="p">(</span><span class="n">PaymentLink</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+<span class="p">}</span>
+</pre></div>
+
+<p>Lets take a look at what we did here. First we grab the current timestamp and create our pending order.</p>
+
+<div class="highlight"><pre>    <span class="c1">//Get Timestamp</span>
+    <span class="n">DateTime</span> <span class="n">date</span> <span class="p">=</span> <span class="n">DateTime</span><span class="p">.</span><span class="n">Now</span><span class="p">;</span>
+    <span class="n">String</span> <span class="n">time</span> <span class="p">=</span> <span class="n">date</span><span class="p">.</span><span class="n">ToString</span><span class="p">(</span><span class="s">"yyyyMMdd-HHmmss"</span><span class="p">);</span>
+
+    <span class="c1">//Create Pending Order</span>
+    <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Order</span><span class="p">();</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">CustomerName</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">Total</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="n">order</span><span class="p">.</span><span class="n">DatePlaced</span> <span class="p">=</span> <span class="n">time</span><span class="p">;</span>
+    <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">order</span><span class="p">);</span>
+    <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+</pre></div>
+
+<p>Then we use the <code>TwocheckoutCharge.Link()</code> method to create our payment link so we can redirect the buyer to 2Checkout.</p>
+
+<div class="highlight"><pre>    <span class="c1">//Pass to 2Checkout</span>
+    <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sid"</span><span class="p">,</span> <span class="s">"1817037"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"mode"</span><span class="p">,</span> <span class="s">"2CO"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_type"</span><span class="p">,</span> <span class="s">"Product"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_name"</span><span class="p">,</span> <span class="s">"Example Product"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"li_0_price"</span><span class="p">,</span> <span class="s">"1.00"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"merchant_order_id"</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">ID</span><span class="p">.</span><span class="n">ToString</span><span class="p">());</span>
+    <span class="n">String</span> <span class="n">PaymentLink</span> <span class="p">=</span> <span class="n">TwocheckoutCharge</span><span class="p">.</span><span class="n">Link</span><span class="p">(</span><span class="n">dictionary</span><span class="p">);</span>
+    <span class="n">Response</span><span class="p">.</span><span class="n">Redirect</span><span class="p">(</span><span class="n">PaymentLink</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+</pre></div>
+
+<h2>Passback</h2>
+
+<p>When the order is completed, 2Checkout will return the buyer and the sale parameters to the URL that we specify as the approved URL in our account. This URL can also be passed in dynamically for each sale using the <code>x_receipt_link_url</code> parameter.</p>
+
+<p>Lets create the return URL by adding a return method. We will also need to setup our return method to handle the passback and display the confirmation page.</p>
+
+<p><em>Controllers/OrdersController.cs</em></p>
+
+<div class="highlight"><pre>    <span class="c1">//Passback from 2Checkout</span>
+    <span class="k">public</span> <span class="n">ActionResult</span> <span class="nf">Return</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="c1">//Check MD5 Hash Returned</span>
+        <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sid"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"sid"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"order_number"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"order_number"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"total"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"total"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"key"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"key"</span><span class="p">]);</span>
+        <span class="n">TwocheckoutResponse</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutReturn</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="n">dictionary</span><span class="p">,</span> <span class="s">"tango"</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"Success"</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="c1">//Get Timestamp</span>
+            <span class="n">DateTime</span> <span class="n">date</span> <span class="p">=</span> <span class="n">DateTime</span><span class="p">.</span><span class="n">Now</span><span class="p">;</span>
+            <span class="n">String</span> <span class="n">time</span> <span class="p">=</span> <span class="n">date</span><span class="p">.</span><span class="n">ToString</span><span class="p">(</span><span class="s">"yyyyMMdd-HHmmss"</span><span class="p">);</span>
+
+            <span class="c1">//Update Order as Paid</span>
+            <span class="kt">int</span> <span class="n">ID</span> <span class="p">=</span> <span class="n">Convert</span><span class="p">.</span><span class="n">ToInt32</span><span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"merchant_order_id"</span><span class="p">]);</span>
+            <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"order_number"</span><span class="p">];</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">DatePlaced</span> <span class="p">=</span> <span class="n">time</span><span class="p">;</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">CustomerName</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"card_holder_name"</span><span class="p">];</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">Total</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"total"</span><span class="p">];</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+
+            <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+
+            <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"Thank you for your Order!"</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">else</span>
+        <span class="p">{</span>
+            <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"There was a problem with your order. Please contact the site owner to troubleshoot!"</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+    <span class="p">}</span>
+</pre></div>
+
+<p>First we need to validate the MD5 Hash returned by 2Checkout, so we grab the <code>sid</code>, <code>total</code>, <code>order_number</code> and <code>key</code> from the parameters returned by 2Checkout and assign them to the <code>dictionary</code> Dictionary.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sid"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"sid"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"order_number"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"order_number"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"total"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"total"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"key"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"key"</span><span class="p">]);</span>
+</pre></div>
+
+<p>Then we pass the Dictionary to the <code>TwocheckoutReturn.Check()</code> binding as the first argument and our secret word as the second argument. This method will return the string "Success" if the hash matches.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutReturn</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="n">dictionary</span><span class="p">,</span> <span class="s">"tango"</span><span class="p">);</span>
+</pre></div>
+
+<p>If the hash matches, we update the order and display the return page. If the hash does not match, we display an error message.</p>
+
+<div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"Success"</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">//Get Timestamp</span>
+        <span class="n">DateTime</span> <span class="n">date</span> <span class="p">=</span> <span class="n">DateTime</span><span class="p">.</span><span class="n">Now</span><span class="p">;</span>
+        <span class="n">String</span> <span class="n">time</span> <span class="p">=</span> <span class="n">date</span><span class="p">.</span><span class="n">ToString</span><span class="p">(</span><span class="s">"yyyyMMdd-HHmmss"</span><span class="p">);</span>
+
+        <span class="c1">//Update Order as Paid</span>
+        <span class="kt">int</span> <span class="n">ID</span> <span class="p">=</span> <span class="n">Convert</span><span class="p">.</span><span class="n">ToInt32</span><span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"merchant_order_id"</span><span class="p">]);</span>
+        <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"order_number"</span><span class="p">];</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">DatePlaced</span> <span class="p">=</span> <span class="n">time</span><span class="p">;</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">CustomerName</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"card_holder_name"</span><span class="p">];</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">Total</span> <span class="p">=</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"total"</span><span class="p">];</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+
+        <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+        <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+
+        <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"Thank you for your Order!"</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span>
+    <span class="p">{</span>
+        <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"There was a problem with your order. Please contact the site owner to troubleshoot!"</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+</pre></div>
+
+<p>We also need to add the corresponding view.</p>
+
+<p>_Views/Orders/Return.cshtml</p>
+
+<div class="highlight"><pre><span class="err">@</span><span class="p">{</span>
+    <span class="n">ViewBag</span><span class="p">.</span><span class="n">Title</span> <span class="p">=</span> <span class="s">"Return"</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">&lt;</span><span class="n">h2</span><span class="p">&gt;</span><span class="n">@ViewBag</span><span class="p">.</span><span class="n">Message</span><span class="p">&lt;/</span><span class="n">h2</span><span class="p">&gt;</span>
+</pre></div>
+
+<p>Now we can setup our return method, enter our secret word and provide the approved URL path under the Site Management page in our 2Checkout admin.</p>
+
+<p><strong>Site Management Page</strong></p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-3.png" alt=""></p>
+
+<p><strong>Lets try it out with a live sale.</strong></p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-1.png" alt=""></p>
+
+<p><strong>Enter in our billing information and submit the payment.</strong></p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-4.png" alt=""></p>
+
+<p><strong>Return Page.</strong></p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-5.png" alt=""></p>
+
+<h2>Notifications</h2>
+
+<p>2Checkout will send notifications to our application under the following circumstances.</p>
+
+<ul>
+<li>Order Created</li>
+<li>Fraud Status Changed</li>
+<li>Shipping Status Changed</li>
+<li>Invoice Status Changed</li>
+<li>Refund Issued</li>
+<li>Recurring Installment Success</li>
+<li>Recurring Installment Failed</li>
+<li>Recurring Stopped</li>
+<li>Recurring Complete</li>
+<li>Recurring Restarted</li>
+</ul><p>For our application, we are interested in the Fraud Status Changed message so that we can mark the order as refunded is it fails fraud review. To handle this message, we will create a new notification route.</p>
+
+<p><em>Controllers/OrdersController.cs</em></p>
+
+<div class="highlight"><pre>    <span class="c1">//Handle Fraud Status Changed INS Message</span>
+    <span class="k">public</span> <span class="n">ActionResult</span> <span class="nf">Notification</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="c1">//Check MD5 Hash</span>
+        <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"vendor_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"vendor_id"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sale_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"sale_id"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"invoice_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"invoice_id"</span><span class="p">]);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"md5_hash"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"md5_hash"</span><span class="p">]);</span>
+        <span class="kt">var</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutNotification</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="n">dictionary</span><span class="p">,</span> <span class="s">"tango"</span><span class="p">);</span>
+
+        <span class="c1">//Check to insure MD5 Matches</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"Success"</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="c1">//Get Order ID</span>
+            <span class="kt">int</span> <span class="n">ID</span> <span class="p">=</span> <span class="n">Convert</span><span class="p">.</span><span class="n">ToInt32</span><span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"vendor_order_id"</span><span class="p">]);</span>
+
+            <span class="c1">//Check Message Type and Fraud Status</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"message_type"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"FRAUD_STATUS_CHANGED"</span> <span class="p">&amp;&amp;</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"fraud_status"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"pass"</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+                <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+                <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+                <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+            <span class="p">}</span>
+            <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"message_type"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"FRAUD_STATUS_CHANGED"</span> <span class="p">&amp;&amp;</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"fraud_status"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"fail"</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+                <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">"Yes"</span><span class="p">;</span>
+                <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+                <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+            <span class="p">}</span>
+
+            <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"MD5 Hash Matched"</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">else</span>
+        <span class="p">{</span>
+            <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"MD5 Hash Mismatch"</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+    <span class="p">}</span>
+</pre></div>
+
+<p>We grab the message parameters and assign the <code>vendor_id</code>, <code>invoice_id</code>, <code>sale_id</code> and <code>md5_hash</code> values to a new Dictionary.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"vendor_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"vendor_id"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sale_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"sale_id"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"invoice_id"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"invoice_id"</span><span class="p">]);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"md5_hash"</span><span class="p">,</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"md5_hash"</span><span class="p">]);</span>
+</pre></div>
+
+<p>Then we pass the Dictionary to the <code>TwocheckoutNotification.Check()</code> binding as the first argument and our secret word as the second argument. This method will return a string "Success" if the hash matches.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutNotification</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="n">dictionary</span><span class="p">,</span> <span class="s">"tango"</span><span class="p">);</span>
+</pre></div>
+
+<p>If the hash matches, we can preform actions based on the <code>message_type</code> parameter value.</p>
+
+<p>For the Fraud Status Changed message, we will also check the value of the <code>fraud_status</code> parameter and only send the product if it equals 'pass'.</p>
+
+<div class="highlight"><pre><span class="c1">//Check to insure MD5 Matches</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"Success"</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">//Get Order ID</span>
+        <span class="kt">int</span> <span class="n">ID</span> <span class="p">=</span> <span class="n">Convert</span><span class="p">.</span><span class="n">ToInt32</span><span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"vendor_order_id"</span><span class="p">]);</span>
+
+        <span class="c1">//Check Message Type and Fraud Status</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"message_type"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"FRAUD_STATUS_CHANGED"</span> <span class="p">&amp;&amp;</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"fraud_status"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"pass"</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">""</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+        <span class="p">}</span>
+        <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span><span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"message_type"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"FRAUD_STATUS_CHANGED"</span> <span class="p">&amp;&amp;</span> <span class="n">Request</span><span class="p">.</span><span class="n">Params</span><span class="p">[</span><span class="s">"fraud_status"</span><span class="p">]</span> <span class="p">==</span> <span class="s">"fail"</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">ID</span><span class="p">);</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">"Yes"</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"MD5 Hash Matched"</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span>
+    <span class="p">{</span>
+        <span class="n">ViewBag</span><span class="p">.</span><span class="n">Message</span> <span class="p">=</span> <span class="s">"MD5 Hash Mismatch"</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nf">View</span><span class="p">();</span>
+</pre></div>
+
+<p>We also need to add the corresponding view.</p>
+
+<p>_Views/Orders/Notification.cshtml</p>
+
+<div class="highlight"><pre><span class="err">@</span><span class="p">{</span>
+    <span class="n">ViewBag</span><span class="p">.</span><span class="n">Title</span> <span class="p">=</span> <span class="s">"Notification"</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">&lt;</span><span class="n">h2</span><span class="p">&gt;</span><span class="n">@ViewBag</span><span class="p">.</span><span class="n">Message</span><span class="p">&lt;/</span><span class="n">h2</span><span class="p">&gt;</span>
+</pre></div>
+
+<p>Now we can setup our Notification URL path and enable the Fraud Status Changed message under the Notifications page in our 2Checkout admin.</p>
+
+<p><img src="http://github.com/2checkout/2checkout-dotNet-tutorial/raw/master/img/site-6.png" alt=""></p>
+
+<p>Lets test our notification function. Now there are a couple ways to go about this. You can wait for the notifications to come on a live sale, or just head over to the <a href="http://developers.2checkout.com/inss">INS testing tool</a> and test the messages right now. Remember the MD5 hash must match so for easy testing, you must compute the hash based on like below:</p>
+
+<p><code>UPPERCASE(MD5_ENCRYPTED(sale\_id + vendor\_id + invoice\_id + Secret Word))</code></p>
+
+<p>You can just use an <a href="https://www.google.com/webhp?q=md5+generator">online MD5 Hash generator</a> and convert it to uppercase.</p>
+
+<h2>API</h2>
+
+<p>To provide an example on using the API, we will add a refund method to the <em>/Orders</em> index page. To accomplish this we will need to add a Refund method to our Orders Controller and create the corresponding view.</p>
+
+<p><em>Controllers/OrdersController.cs</em></p>
+
+<div class="highlight"><pre>    <span class="c1">//Use 2Checkout API to Refund</span>
+    <span class="k">public</span> <span class="n">ActionResult</span> <span class="nf">Refund</span><span class="p">(</span><span class="kt">int</span> <span class="n">id</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nf">View</span><span class="p">(</span><span class="n">order</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Use 2Checkout API to Refund</span>
+<span class="na">    [HttpPost, ActionName("Refund")]</span>
+    <span class="k">public</span> <span class="n">ActionResult</span> <span class="nf">RefundConfirmed</span><span class="p">(</span><span class="kt">int</span> <span class="n">id</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">//Find Order</span>
+        <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+
+        <span class="c1">//Set API Credentials</span>
+        <span class="n">TwocheckoutConfig</span><span class="p">.</span><span class="n">ApiUsername</span> <span class="p">=</span> <span class="s">"APIuser1817037"</span><span class="p">;</span>
+        <span class="n">TwocheckoutConfig</span><span class="p">.</span><span class="n">ApiPassword</span> <span class="p">=</span> <span class="s">"APIpass1817037"</span><span class="p">;</span>
+
+        <span class="c1">//Attempt Refund</span>
+        <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sale_id"</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span><span class="p">);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"comment"</span><span class="p">,</span> <span class="s">"Refunded"</span><span class="p">);</span>
+        <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"category"</span><span class="p">,</span> <span class="s">"5"</span><span class="p">);</span>
+        <span class="n">TwocheckoutResponse</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutSale</span><span class="p">.</span><span class="n">Refund</span><span class="p">(</span><span class="n">dictionary</span><span class="p">);</span>
+
+        <span class="c1">//If Successful, update order.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"OK"</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">"Yes"</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+            <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="nf">RedirectToAction</span><span class="p">(</span><span class="s">"Index"</span><span class="p">);</span>
+    <span class="p">}</span>
+</pre></div>
+
+<p>We grab the order ID so that we can find the order in our Refund method.</p>
+
+<div class="highlight"><pre>    <span class="n">Order</span> <span class="n">order</span> <span class="p">=</span> <span class="n">db</span><span class="p">.</span><span class="n">Orders</span><span class="p">.</span><span class="n">Find</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+</pre></div>
+
+<p>We set our API username and password.</p>
+
+<div class="highlight"><pre>    <span class="n">TwocheckoutConfig</span><span class="p">.</span><span class="n">ApiUsername</span> <span class="p">=</span> <span class="s">"APIuser1817037"</span><span class="p">;</span>
+    <span class="n">TwocheckoutConfig</span><span class="p">.</span><span class="n">ApiPassword</span> <span class="p">=</span> <span class="s">"APIpass1817037"</span><span class="p">;</span>
+</pre></div>
+
+<p>We create a new Dictionary and add the orders sale_id, a refund comment and a category as required by 2Checkout to complete the refund action.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">dictionary</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">&gt;();</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"sale_id"</span><span class="p">,</span> <span class="n">order</span><span class="p">.</span><span class="n">OrderNumber</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"comment"</span><span class="p">,</span> <span class="s">"Refunded"</span><span class="p">);</span>
+    <span class="n">dictionary</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">"category"</span><span class="p">,</span> <span class="s">"5"</span><span class="p">);</span>
+</pre></div>
+
+<p>Now we use the <code>TwocheckoutSale.Refund</code> method to attempt the refund.</p>
+
+<div class="highlight"><pre>    <span class="kt">var</span> <span class="n">result</span> <span class="p">=</span> <span class="n">TwocheckoutSale</span><span class="p">.</span><span class="n">Refund</span><span class="p">(</span><span class="n">dictionary</span><span class="p">);</span>
+</pre></div>
+
+<p>If the refund is successful, we will update the order status, then we return the user to the Order index.</p>
+
+<div class="highlight"><pre>    <span class="k">if</span> <span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">response_code</span> <span class="p">==</span> <span class="s">"OK"</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">order</span><span class="p">.</span><span class="n">Refunded</span> <span class="p">=</span> <span class="s">"Yes"</span><span class="p">;</span>
+        <span class="n">db</span><span class="p">.</span><span class="n">Entry</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="n">State</span> <span class="p">=</span> <span class="n">EntityState</span><span class="p">.</span><span class="n">Modified</span><span class="p">;</span>
+        <span class="n">db</span><span class="p">.</span><span class="n">SaveChanges</span><span class="p">();</span>
+    <span class="p">}</span>
+</pre></div>
+
+<h2>Conclusion</h2>
+
+<p>Now our application is fully integrated! Our buyers can pay for the product, we update the sale based on the passback and INS Fraud Status Changed message, and we can refund the sales through the API.</p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">2Checkout .NET Tutorial maintained by <a href="https://github.com/2Checkout">2Checkout</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
